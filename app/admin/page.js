@@ -50,30 +50,174 @@ export default function AdminPage() {
         }
     }, [user, isAdmin, authLoading, router]);
 
-    const handleLogout = async () => {
-        const { signOut } = await import('../context/AuthContext'); // Dynamic import to avoid circular dep if needed, or just use context
-        await supabase.auth.signOut();
-        router.push('/login');
+    // Load Data
+    const loadStats = async () => {
+        setLoading(true);
+        try {
+            const today = new Date().toISOString().split('T')[0];
+            const startOfWeek = new Date();
+            startOfWeek.setDate(startOfWeek.getDate() - startOfWeek.getDay());
+            const startOfMonth = new Date();
+            startOfMonth.setDate(1);
+            const startOfMonthStr = startOfMonth.toISOString().split('T')[0];
+
+            // 1. Agendamentos
+            const { count: dailyCount } = await supabase.from('appointments').select('*', { count: 'exact', head: true }).eq('date', today);
+            const { count: weeklyCount } = await supabase.from('appointments').select('*', { count: 'exact', head: true }).gte('date', startOfWeek.toISOString().split('T')[0]);
+            // Contar agendamentos do mês para cálculo de Ticket Médio
+            const { count: monthlyCount } = await supabase.from('appointments').select('*', { count: 'exact', head: true }).gte('date', startOfMonthStr).eq('status', 'completed');
+
+            // 2. Financeiro Mês (Receitas e Despesas - DETALHADO)
+            const { data: monthTransactions, error: transactionError } = await supabase
+                .from('transactions')
+                .select('*')
+                .gte('date', startOfMonthStr)
+                .order('date');
+
+            if (transactionError) throw transactionError;
+
+            const monthlyRevenue = monthTransactions
+                ?.filter(t => t.type === 'income')
+                .reduce((acc, curr) => acc + (curr.amount || 0), 0) || 0;
+
+            const monthlyExpenses = monthTransactions
+                ?.filter(t => t.type === 'expense')
+                .reduce((acc, curr) => acc + (curr.amount || 0), 0) || 0;
+
+            const averageTicket = monthlyCount > 0 ? monthlyRevenue / monthlyCount : 0;
+
+            // Processar Dados para Gráfico de Receita vs Despesas
+            const revenueByDate = {};
+            monthTransactions?.forEach(t => {
+                const date = new Date(t.date).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
+                if (!revenueByDate[date]) revenueByDate[date] = { date, income: 0, expense: 0 };
+                if (t.type === 'income') revenueByDate[date].income += t.amount;
+                else revenueByDate[date].expense += t.amount;
+            });
+            const revenueChartData = Object.values(revenueByDate).sort((a, b) => a.date.localeCompare(b.date));
+
+            // Processar Dados para Gráfico de Despesas por Categoria
+            const expenseByCategory = {};
+            monthTransactions?.filter(t => t.type === 'expense').forEach(t => {
+                if (!expenseByCategory[t.category]) expenseByCategory[t.category] = 0;
+                expenseByCategory[t.category] += t.amount;
+            });
+            const expenseChartData = Object.entries(expenseByCategory).map(([name, value]) => ({ name, value }));
+
+            // 3. Barber Performance (Agendamentos do Mês)
+            const { data: barberApps } = await supabase
+                .from('appointments')
+                .select('price, barbers(name)')
+                .gte('date', startOfMonthStr)
+                .in('status', ['completed', 'confirmed']);
+
+            const barberStats = {};
+            barberApps?.forEach(app => {
+                const barberName = app.barbers?.name || 'Desconhecido';
+                if (!barberStats[barberName]) barberStats[barberName] = { name: barberName, revenue: 0, appointments: 0 };
+                barberStats[barberName].revenue += (app.price || 0);
+                barberStats[barberName].appointments += 1;
+            });
+            const barberChartData = Object.values(barberStats);
+
+            // 4. Barbeiros e Categorias
+            const { count: barberCount } = await supabase.from('barbers').select('*', { count: 'exact', head: true }).eq('is_active', true);
+            const { data: catList } = await supabase.from('expense_categories').select('*').order('name');
+            setCategories(catList || []);
+
+            setMetrics({
+                dailyAppointments: dailyCount || 0,
+                weeklyAppointments: weeklyCount || 0,
+                monthlyRevenue,
+                monthlyExpenses,
+                balance: monthlyRevenue - monthlyExpenses,
+                activeBarbers: barberCount || 0,
+                averageTicket,
+                monthlyAppointments: monthlyCount || 0
+            });
+
+            setChartData({
+                revenue: revenueChartData,
+                barber: barberChartData,
+                expenses: expenseChartData
+            });
+
+            // 5. Transações Recentes
+            const { data: recentTransactions } = await supabase
+                .from('transactions')
+                .select('*')
+                .order('date', { ascending: false })
+                .limit(20);
+
+            if (recentTransactions) setTransactions(recentTransactions);
+
+            // 6. Lista de Barbeiros
+            const { data: barbersList } = await supabase.from('barbers').select('*').order('name');
+            if (barbersList) setBarbers(barbersList);
+        } catch (error) {
+            console.error('Erro ao carregar dashboard:', error);
+        } finally {
+            setLoading(false);
+        }
     };
 
-    // ... inside component render
+    useEffect(() => {
+        if (user && isAdmin) loadStats();
+    }, [user, isAdmin, activeView]);
+
+    const handleSaveTransaction = async (e) => {
+        e.preventDefault();
+        const { error } = await supabase.from('transactions').insert([{
+            ...formData,
+            amount: parseFloat(formData.amount)
+        }]);
+
+        if (error) {
+            alert('Erro ao salvar transação: ' + error.message);
+        } else {
+            setShowModal(false);
+            setFormData({ ...formData, description: '', amount: '' });
+            loadStats(); // Recarregar dados
+        }
+    };
+
+    // Helper para iniciais
+    const getInitials = (name) => {
+        if (!name) return 'AD';
+        const parts = name.split(' ');
+        if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
+        return name.slice(0, 2).toUpperCase();
+    };
+
+    const userName = user?.user_metadata?.full_name || 'Administrador';
+    const userEmail = user?.email || '';
 
     return (
         <div className="page container">
-            <div className="flex-between page-header">
+            <div className="flex-between page-header items-center">
                 <div>
                     <h1>Painel Administrativo</h1>
                     <p>Visão geral e configurações da barbearia.</p>
                 </div>
-                <button
-                    onClick={async () => {
-                        await supabase.auth.signOut();
-                        router.push('/login');
-                    }}
-                    className="btn btn-sm btn-outline text-red border-red-500 hover:bg-red-900/20"
-                >
-                    Sair
-                </button>
+
+                <div className="flex items-center gap-4">
+                    <div className="text-right hidden md:block">
+                        <p className="font-bold text-white text-sm">{userName}</p>
+                        <p className="text-xs text-gray">{userEmail}</p>
+                    </div>
+
+                    <div className="w-10 h-10 rounded-full bg-gold/20 flex-center text-gold font-bold border border-gold/30">
+                        {getInitials(userName)}
+                    </div>
+
+                    <button
+                        onClick={handleLogout}
+                        className="btn btn-sm btn-outline text-red border-red-500 hover:bg-red-900/20"
+                        title="Sair"
+                    >
+                        Sair
+                    </button>
+                </div>
             </div>
 
             {/* Admin Nav */}

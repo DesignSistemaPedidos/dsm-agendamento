@@ -3,8 +3,9 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { useAuth } from '../context/AuthContext'; // Importar Auth Context
+import { useAuth } from '../context/AuthContext';
 import { useRouter } from 'next/navigation';
+import { supabase } from '@/lib/supabase';
 
 export default function LoginPage() {
     const { signIn, signUp } = useAuth();
@@ -31,8 +32,22 @@ export default function LoginPage() {
         try {
             if (isLogin) {
                 // Login
-                await signIn(formData.email, formData.password);
-                router.push('/'); // Redirecionar para home
+                const { user } = await signIn(formData.email, formData.password);
+
+                // Check role for redirect
+                const { data: profile } = await supabase
+                    .from('profiles')
+                    .select('role')
+                    .eq('id', user.id)
+                    .single();
+
+                if (profile?.role === 'admin') {
+                    router.push('/admin');
+                } else if (profile?.role === 'barber') {
+                    router.push('/barbeiro');
+                } else {
+                    router.push('/');
+                }
             } else {
                 // Cadastro
                 const { user, session } = await signUp(formData.email, formData.password, {

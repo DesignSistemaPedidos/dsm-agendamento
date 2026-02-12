@@ -6,12 +6,17 @@ import { AuthProvider } from './context/AuthContext';
 const inter = Inter({ subsets: ['latin'], variable: '--font-inter' });
 const outfit = Outfit({ subsets: ['latin'], variable: '--font-outfit' });
 
+export const viewport = {
+    themeColor: '#D4A853',
+    width: 'device-width',
+    initialScale: 1,
+    maximumScale: 1,
+};
+
 export const metadata = {
     title: 'DSM Agendamento - Barbearia Premium',
     description: 'Agende seu corte com os melhores profissionais.',
     manifest: '/manifest.json',
-    themeColor: '#D4A853',
-    viewport: 'width=device-width, initial-scale=1, maximum-scale=1',
     appleWebApp: {
         capable: true,
         statusBarStyle: 'black-translucent',

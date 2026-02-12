@@ -33,6 +33,7 @@ export default function AdminPage() {
     // Modal State
     const [showModal, setShowModal] = useState(false);
     const [categories, setCategories] = useState([]);
+    const [targetProfit, setTargetProfit] = useState(5000); // Meta padrão
     const [formData, setFormData] = useState({
         type: 'expense',
         category: '',
@@ -45,134 +46,34 @@ export default function AdminPage() {
     // Protect Route
     useEffect(() => {
         if (!authLoading && (!user || !isAdmin)) {
-            router.push('/');
+            router.push('/login');
         }
     }, [user, isAdmin, authLoading, router]);
 
-    // Load Data
-    const loadStats = async () => {
-        setLoading(true);
-        const today = new Date().toISOString().split('T')[0];
-        const startOfWeek = new Date();
-        startOfWeek.setDate(startOfWeek.getDate() - startOfWeek.getDay());
-        const startOfMonth = new Date();
-        startOfMonth.setDate(1);
-        const startOfMonthStr = startOfMonth.toISOString().split('T')[0];
-
-        // 1. Agendamentos
-        const { count: dailyCount } = await supabase.from('appointments').select('*', { count: 'exact', head: true }).eq('date', today);
-        const { count: weeklyCount } = await supabase.from('appointments').select('*', { count: 'exact', head: true }).gte('date', startOfWeek.toISOString().split('T')[0]);
-
-        // 2. Financeiro Mês (Receitas e Despesas - DETALHADO)
-        const { data: monthTransactions } = await supabase
-            .from('transactions')
-            .select('*')
-            .gte('date', startOfMonthStr)
-            .order('date');
-
-        const monthlyRevenue = monthTransactions
-            ?.filter(t => t.type === 'income')
-            .reduce((acc, curr) => acc + (curr.amount || 0), 0) || 0;
-
-        const monthlyExpenses = monthTransactions
-            ?.filter(t => t.type === 'expense')
-            .reduce((acc, curr) => acc + (curr.amount || 0), 0) || 0;
-
-        // Processar Dados para Gráfico de Receita vs Despesas
-        const revenueByDate = {};
-        monthTransactions?.forEach(t => {
-            const date = new Date(t.date).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
-            if (!revenueByDate[date]) revenueByDate[date] = { date, income: 0, expense: 0 };
-            if (t.type === 'income') revenueByDate[date].income += t.amount;
-            else revenueByDate[date].expense += t.amount;
-        });
-        const revenueChartData = Object.values(revenueByDate).sort((a, b) => a.date.localeCompare(b.date));
-
-        // Processar Dados para Gráfico de Despesas por Categoria
-        const expenseByCategory = {};
-        monthTransactions?.filter(t => t.type === 'expense').forEach(t => {
-            if (!expenseByCategory[t.category]) expenseByCategory[t.category] = 0;
-            expenseByCategory[t.category] += t.amount;
-        });
-        const expenseChartData = Object.entries(expenseByCategory).map(([name, value]) => ({ name, value }));
-
-        // 3. Barber Performance (Agendamentos do Mês)
-        const { data: barberApps } = await supabase
-            .from('appointments')
-            .select('price, barbers(name)')
-            .gte('date', startOfMonthStr)
-            .in('status', ['completed', 'confirmed']);
-
-        const barberStats = {};
-        barberApps?.forEach(app => {
-            const barberName = app.barbers?.name || 'Desconhecido';
-            if (!barberStats[barberName]) barberStats[barberName] = { name: barberName, revenue: 0, appointments: 0 };
-            barberStats[barberName].revenue += (app.price || 0);
-            barberStats[barberName].appointments += 1;
-        });
-        const barberChartData = Object.values(barberStats);
-
-        // 4. Barbeiros e Categorias
-        const { count: barberCount } = await supabase.from('barbers').select('*', { count: 'exact', head: true }).eq('is_active', true);
-        const { data: catList } = await supabase.from('expense_categories').select('*').order('name');
-        setCategories(catList || []);
-
-        setMetrics({
-            dailyAppointments: dailyCount || 0,
-            weeklyAppointments: weeklyCount || 0,
-            monthlyRevenue,
-            monthlyExpenses,
-            balance: monthlyRevenue - monthlyExpenses,
-            activeBarbers: barberCount || 0
-        });
-
-        setChartData({
-            revenue: revenueChartData,
-            barber: barberChartData,
-            expenses: expenseChartData
-        });
-
-        // 5. Transações Recentes
-        const { data: recentTransactions } = await supabase
-            .from('transactions')
-            .select('*')
-            .order('date', { ascending: false })
-            .limit(20);
-
-        if (recentTransactions) setTransactions(recentTransactions);
-
-        // 6. Lista de Barbeiros
-        const { data: barbersList } = await supabase.from('barbers').select('*').order('name');
-        if (barbersList) setBarbers(barbersList);
-
-        setLoading(false);
+    const handleLogout = async () => {
+        const { signOut } = await import('../context/AuthContext'); // Dynamic import to avoid circular dep if needed, or just use context
+        await supabase.auth.signOut();
+        router.push('/login');
     };
 
-    useEffect(() => {
-        if (user && isAdmin) loadStats();
-    }, [user, isAdmin, activeView]);
-
-    const handleSaveTransaction = async (e) => {
-        e.preventDefault();
-        const { error } = await supabase.from('transactions').insert([{
-            ...formData,
-            amount: parseFloat(formData.amount)
-        }]);
-
-        if (error) {
-            alert('Erro ao salvar transação: ' + error.message);
-        } else {
-            setShowModal(false);
-            setFormData({ ...formData, description: '', amount: '' });
-            loadStats(); // Recarregar dados
-        }
-    };
+    // ... inside component render
 
     return (
         <div className="page container">
-            <div className="page-header">
-                <h1>Painel Administrativo</h1>
-                <p>Visão geral e configurações da barbearia.</p>
+            <div className="flex-between page-header">
+                <div>
+                    <h1>Painel Administrativo</h1>
+                    <p>Visão geral e configurações da barbearia.</p>
+                </div>
+                <button
+                    onClick={async () => {
+                        await supabase.auth.signOut();
+                        router.push('/login');
+                    }}
+                    className="btn btn-sm btn-outline text-red border-red-500 hover:bg-red-900/20"
+                >
+                    Sair
+                </button>
             </div>
 
             {/* Admin Nav */}
@@ -261,6 +162,90 @@ export default function AdminPage() {
                         <div className="card">
                             <h3 className="mb-4">Distribuição de Despesas</h3>
                             <ExpenseBreakdownChart data={chartData.expenses} />
+                        </div>
+                    </div>
+
+                    {/* Projeções Financeiras */}
+                    <div className="card mb-8">
+                        <h3 className="mb-4">🎯 Projeções e Metas</h3>
+                        <div className="grid-2 gap-8">
+                            <div>
+                                <h4 className="text-gold mb-2">Ponto de Equilíbrio</h4>
+                                <p className="text-sm text-gray mb-4">
+                                    Quanto você precisa faturar para pagar todas as despesas fixas e variáveis atuais.
+                                </p>
+                                <div className="stat-value text-white mb-2">
+                                    {metrics.averageTicket > 0
+                                        ? Math.ceil(metrics.monthlyExpenses / metrics.averageTicket)
+                                        : 0} <span className="text-sm font-normal text-gray">atendimentos/mês</span>
+                                </div>
+                                <p className="text-xs text-gray">
+                                    Baseado no Ticket Médio de R$ {metrics.averageTicket?.toLocaleString('pt-BR', { minimumFractionDigits: 2 }) || '0,00'}
+                                </p>
+                            </div>
+
+                            <div style={{ borderLeft: '1px solid #333', paddingLeft: '2rem' }}>
+                                <h4 className="text-green mb-2">Meta de Lucro</h4>
+                                <div className="flex gap-2 items-center mb-4">
+                                    <label className="text-sm">Meta de Lucro Líquido (R$):</label>
+                                    <input
+                                        type="number"
+                                        className="input py-1 px-2 w-32"
+                                        value={targetProfit}
+                                        onChange={(e) => setTargetProfit(Number(e.target.value))}
+                                    />
+                                </div>
+                                <div className="stat-value text-white mb-2">
+                                    {metrics.averageTicket > 0
+                                        ? Math.ceil((metrics.monthlyExpenses + targetProfit) / metrics.averageTicket)
+                                        : 0} <span className="text-sm font-normal text-gray">atendimentos totais/mês</span>
+                                </div>
+                                <p className="text-xs text-gray">
+                                    Você precisa de <strong>{metrics.averageTicket > 0 ? (Math.ceil((metrics.monthlyExpenses + targetProfit) / metrics.averageTicket) - metrics.monthlyAppointments) : 0}</strong> atendimentos adicionais aos {metrics.monthlyAppointments} já realizados este mês.
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Projeções Financeiras */}
+                    <div className="card mb-8">
+                        <h3 className="mb-4">🎯 Projeções e Metas</h3>
+                        <div className="grid-2 gap-8">
+                            <div>
+                                <h4 className="text-gold mb-2">Ponto de Equilíbrio</h4>
+                                <p className="text-sm text-gray mb-4">
+                                    Quanto você precisa faturar para pagar todas as despesas fixas e variáveis atuais.
+                                </p>
+                                <div className="stat-value text-white mb-2">
+                                    {metrics.averageTicket > 0
+                                        ? Math.ceil(metrics.monthlyExpenses / metrics.averageTicket)
+                                        : 0} <span className="text-sm font-normal text-gray">atendimentos/mês</span>
+                                </div>
+                                <p className="text-xs text-gray">
+                                    Baseado no Ticket Médio de R$ {metrics.averageTicket?.toLocaleString('pt-BR', { minimumFractionDigits: 2 }) || '0,00'}
+                                </p>
+                            </div>
+
+                            <div style={{ borderLeft: '1px solid #333', paddingLeft: '2rem' }}>
+                                <h4 className="text-green mb-2">Meta de Lucro</h4>
+                                <div className="flex gap-2 items-center mb-4">
+                                    <label className="text-sm">Meta de Lucro Líquido (R$):</label>
+                                    <input
+                                        type="number"
+                                        className="input py-1 px-2 w-32"
+                                        value={targetProfit}
+                                        onChange={(e) => setTargetProfit(Number(e.target.value))}
+                                    />
+                                </div>
+                                <div className="stat-value text-white mb-2">
+                                    {metrics.averageTicket > 0
+                                        ? Math.ceil((metrics.monthlyExpenses + targetProfit) / metrics.averageTicket)
+                                        : 0} <span className="text-sm font-normal text-gray">atendimentos totais/mês</span>
+                                </div>
+                                <p className="text-xs text-gray">
+                                    Você precisa de <strong>{metrics.averageTicket > 0 ? (Math.ceil((metrics.monthlyExpenses + targetProfit) / metrics.averageTicket) - metrics.monthlyAppointments) : 0}</strong> atendimentos adicionais aos {metrics.monthlyAppointments} já realizados este mês.
+                                </p>
+                            </div>
                         </div>
                     </div>
 

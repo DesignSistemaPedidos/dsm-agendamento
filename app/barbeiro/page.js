@@ -18,7 +18,7 @@ export default function BarberConfigPage() {
     // Protect Route
     useEffect(() => {
         if (!authLoading && (!user || !(isBarber || isAdmin))) {
-            router.push('/');
+            router.push('/login');
         }
     }, [user, isBarber, isAdmin, authLoading, router]);
 
@@ -73,6 +73,15 @@ export default function BarberConfigPage() {
             <div className="page container text-center pt-8">
                 <h1 className="text-2xl mb-4">Perfil de Barbeiro não encontrado.</h1>
                 <p>Peça para o administrador vincular seu usuário a um cadastro de barbeiro.</p>
+                <button
+                    onClick={async () => {
+                        await supabase.auth.signOut();
+                        router.push('/login');
+                    }}
+                    className="btn btn-sm btn-outline mt-4"
+                >
+                    Sair
+                </button>
             </div>
         );
     }
@@ -85,12 +94,23 @@ export default function BarberConfigPage() {
                     <h1>Olá, {barberProfile.name.split(' ')[0]} 👋</h1>
                     <p>Confira sua agenda de hoje.</p>
                 </div>
-                <div className="avatar avatar-lg">
-                    {barberProfile.avatar_url ? (
-                        <img src={barberProfile.avatar_url} alt="Perfil" />
-                    ) : (
-                        <span style={{ fontSize: '2rem' }}>✂️</span>
-                    )}
+                <div className="flex-center gap-4">
+                    <div className="avatar avatar-lg">
+                        {barberProfile.avatar_url ? (
+                            <img src={barberProfile.avatar_url} alt="Perfil" />
+                        ) : (
+                            <span style={{ fontSize: '2rem' }}>✂️</span>
+                        )}
+                    </div>
+                    <button
+                        onClick={async () => {
+                            await supabase.auth.signOut();
+                            router.push('/login');
+                        }}
+                        className="btn btn-sm btn-outline text-red border-red-500 hover:bg-red-900/20"
+                    >
+                        Sair
+                    </button>
                 </div>
             </div>
 
@@ -168,8 +188,8 @@ export default function BarberConfigPage() {
                                         </div>
                                         {/* Status Badge */}
                                         <span className={`badge ${app.status === 'confirmed' ? 'badge-green' :
-                                                app.status === 'completed' ? 'badge-blue' :
-                                                    app.status === 'cancelled' ? 'badge-red' : 'badge-amber'
+                                            app.status === 'completed' ? 'badge-blue' :
+                                                app.status === 'cancelled' ? 'badge-red' : 'badge-amber'
                                             }`}>
                                             {app.status === 'confirmed' ? 'Confirmado' :
                                                 app.status === 'completed' ? 'Concluído' :

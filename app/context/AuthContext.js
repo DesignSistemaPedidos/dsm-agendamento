@@ -17,11 +17,20 @@ export const AuthProvider = ({ children }) => {
     useEffect(() => {
         // Verificar sessão atual
         const checkUser = async () => {
-            const { data: { session } } = await supabase.auth.getSession();
-            if (session?.user) {
-                setUser(session.user);
-                fetchProfile(session.user.id);
-            } else {
+            try {
+                const { data: { session }, error } = await supabase.auth.getSession();
+                if (error) throw error;
+
+                if (session?.user) {
+                    console.log('AUTH DEBUG: Session found for', session.user.email);
+                    setUser(session.user);
+                    await fetchProfile(session.user.id);
+                } else {
+                    console.log('AUTH DEBUG: No active session');
+                    setLoading(false);
+                }
+            } catch (err) {
+                console.error('AUTH DEBUG: Error checking session:', err);
                 setLoading(false);
             }
         };
@@ -29,10 +38,11 @@ export const AuthProvider = ({ children }) => {
         checkUser();
 
         // Escutar mudanças na auth
-        const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
+        const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+            console.log('AUTH DEBUG: Auth state change event:', event);
             if (session?.user) {
                 setUser(session.user);
-                fetchProfile(session.user.id);
+                await fetchProfile(session.user.id);
             } else {
                 setUser(null);
                 setProfile(null);
@@ -45,15 +55,25 @@ export const AuthProvider = ({ children }) => {
 
     const fetchProfile = async (userId) => {
         try {
+            console.log('Fetching profile for:', userId);
             const { data, error } = await supabase
                 .from('profiles')
                 .select('*')
                 .eq('id', userId)
                 .single();
 
-            if (data) setProfile(data);
+            if (error) {
+                console.warn('Profile fetch warning:', error.message);
+            }
+
+            if (data) {
+                console.log('Profile loaded:', data.role);
+                setProfile(data);
+            } else {
+                console.warn('No profile found. Creating default client profile disabled here (handled by trigger/admin).');
+            }
         } catch (error) {
-            console.error('Erro ao buscar perfil:', error);
+            console.error('Erro crítico ao buscar perfil:', error);
         } finally {
             setLoading(false);
         }

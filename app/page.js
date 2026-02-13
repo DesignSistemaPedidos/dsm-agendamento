@@ -4,7 +4,14 @@ import Link from 'next/link';
 import { useAuth } from './context/AuthContext';
 
 export default function Home() {
-    const { user, loading } = useAuth();
+    const { user, loading, isAdmin, isBarber } = useAuth();
+
+    // Determine Dashboard Link
+    const getDashboardLink = () => {
+        if (isAdmin) return '/admin';
+        if (isBarber) return '/barbeiro';
+        return '/agendar'; // Client dashboard (to be built) or booking
+    };
 
     return (
         <div className="page" style={{ paddingTop: 0 }}>
@@ -19,7 +26,7 @@ export default function Home() {
                         <Link href="#barbeiros">Barbeiros</Link>
 
                         {!loading && user ? (
-                            <Link href="/admin" className="text-gold font-medium">
+                            <Link href={getDashboardLink()} className="text-gold font-medium">
                                 Minha Conta
                             </Link>
                         ) : (

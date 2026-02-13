@@ -1,4 +1,5 @@
 
+// Build trigger: final fix for handleLogout reference error
 import { Inter, Outfit } from 'next/font/google';
 import './globals.css';
 import { AuthProvider } from './context/AuthContext';

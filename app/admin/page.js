@@ -7,8 +7,12 @@ import { useAuth } from '../context/AuthContext';
 import { useRouter } from 'next/navigation';
 
 export default function AdminPage() {
-    const { user, isAdmin, loading: authLoading } = useAuth();
+    const { user, isAdmin, isBarber, signOut, loading: authLoading } = useAuth();
     const router = useRouter();
+
+    useEffect(() => {
+        console.log('ADMIN DEBUG: user=', !!user, 'isAdmin=', isAdmin, 'isBarber=', isBarber);
+    }, [user, isAdmin, isBarber]);
 
     const [activeView, setActiveView] = useState('dashboard');
     const [metrics, setMetrics] = useState({
@@ -17,8 +21,16 @@ export default function AdminPage() {
         monthlyRevenue: 0,
         monthlyExpenses: 0,
         balance: 0,
-        activeBarbers: 0
+        activeBarbers: 0,
+        averageTicket: 0,
+        monthlyAppointments: 0
     });
+
+    const [mounted, setMounted] = useState(false);
+
+    useEffect(() => {
+        setMounted(true);
+    }, []);
 
     // Chart State
     const [chartData, setChartData] = useState({
@@ -211,7 +223,7 @@ export default function AdminPage() {
                     </div>
 
                     <button
-                        onClick={handleLogout}
+                        onClick={signOut}
                         className="btn btn-sm btn-outline text-red border-red-500 hover:bg-red-900/20"
                         title="Sair"
                     >
@@ -261,11 +273,11 @@ export default function AdminPage() {
                     <div className="grid-2 gap-8 mb-8">
                         <div className="card">
                             <h3 className="mb-4">Desempenho da Equipe</h3>
-                            <BarberPerformanceChart data={chartData.barber} />
+                            {mounted && <BarberPerformanceChart data={chartData.barber} />}
                         </div>
                         <div className="card">
                             <h3 className="mb-4">Receita vs Despesas</h3>
-                            <RevenueChart data={chartData.revenue} />
+                            {mounted && <RevenueChart data={chartData.revenue} />}
                         </div>
                     </div>
 
@@ -301,11 +313,11 @@ export default function AdminPage() {
                     <div className="grid-2 gap-8 mb-8">
                         <div className="card">
                             <h3 className="mb-4">Receita vs Despesas (Evolução)</h3>
-                            <RevenueChart data={chartData.revenue} />
+                            {mounted && <RevenueChart data={chartData.revenue} />}
                         </div>
                         <div className="card">
                             <h3 className="mb-4">Distribuição de Despesas</h3>
-                            <ExpenseBreakdownChart data={chartData.expenses} />
+                            {mounted && <ExpenseBreakdownChart data={chartData.expenses} />}
                         </div>
                     </div>
 
@@ -351,47 +363,7 @@ export default function AdminPage() {
                         </div>
                     </div>
 
-                    {/* Projeções Financeiras */}
-                    <div className="card mb-8">
-                        <h3 className="mb-4">🎯 Projeções e Metas</h3>
-                        <div className="grid-2 gap-8">
-                            <div>
-                                <h4 className="text-gold mb-2">Ponto de Equilíbrio</h4>
-                                <p className="text-sm text-gray mb-4">
-                                    Quanto você precisa faturar para pagar todas as despesas fixas e variáveis atuais.
-                                </p>
-                                <div className="stat-value text-white mb-2">
-                                    {metrics.averageTicket > 0
-                                        ? Math.ceil(metrics.monthlyExpenses / metrics.averageTicket)
-                                        : 0} <span className="text-sm font-normal text-gray">atendimentos/mês</span>
-                                </div>
-                                <p className="text-xs text-gray">
-                                    Baseado no Ticket Médio de R$ {metrics.averageTicket?.toLocaleString('pt-BR', { minimumFractionDigits: 2 }) || '0,00'}
-                                </p>
-                            </div>
 
-                            <div style={{ borderLeft: '1px solid #333', paddingLeft: '2rem' }}>
-                                <h4 className="text-green mb-2">Meta de Lucro</h4>
-                                <div className="flex gap-2 items-center mb-4">
-                                    <label className="text-sm">Meta de Lucro Líquido (R$):</label>
-                                    <input
-                                        type="number"
-                                        className="input py-1 px-2 w-32"
-                                        value={targetProfit}
-                                        onChange={(e) => setTargetProfit(Number(e.target.value))}
-                                    />
-                                </div>
-                                <div className="stat-value text-white mb-2">
-                                    {metrics.averageTicket > 0
-                                        ? Math.ceil((metrics.monthlyExpenses + targetProfit) / metrics.averageTicket)
-                                        : 0} <span className="text-sm font-normal text-gray">atendimentos totais/mês</span>
-                                </div>
-                                <p className="text-xs text-gray">
-                                    Você precisa de <strong>{metrics.averageTicket > 0 ? (Math.ceil((metrics.monthlyExpenses + targetProfit) / metrics.averageTicket) - metrics.monthlyAppointments) : 0}</strong> atendimentos adicionais aos {metrics.monthlyAppointments} já realizados este mês.
-                                </p>
-                            </div>
-                        </div>
-                    </div>
 
                     <div className="card">
                         <h3 className="mb-4">Extrato Completo</h3>

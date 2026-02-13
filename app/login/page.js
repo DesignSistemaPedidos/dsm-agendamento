@@ -8,13 +8,22 @@ import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 
 export default function LoginPage() {
-    const { signIn, signUp } = useAuth();
+    const { user, isAdmin, isBarber, loading: authLoading } = useAuth(); // Update destructuring
     const router = useRouter();
 
     const [isLogin, setIsLogin] = useState(true);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
     const [successMessage, setSuccessMessage] = useState(null);
+
+    // Redirect if already logged in
+    useEffect(() => {
+        if (!authLoading && user) {
+            if (isAdmin) router.push('/admin');
+            else if (isBarber) router.push('/barbeiro');
+            else router.push('/');
+        }
+    }, [user, isAdmin, isBarber, authLoading, router]);
 
     const [formData, setFormData] = useState({
         email: '',
